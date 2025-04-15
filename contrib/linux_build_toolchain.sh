@@ -8,6 +8,7 @@
 WORKING_ROOT_DIR="${PWD}"
 SDK_DIR="${WORKING_ROOT_DIR}/sdk-ng"
 BUILD_DIR="${WORKING_ROOT_DIR}/build-workspace"
+CANADIAN=""
 
 function usage()
 {
@@ -23,11 +24,14 @@ function usage()
 	echo "  -o Build directory, for building artifacts and final output. Optional."
 	echo "     Default is ${BUILD_DIR}"
 	echo ""
+	echo "  -x canadian cross target. Optional."
+	echo "     Default is native"
+	echo ""
 	echo "  -h This help."
 	echo ""
 }
 
-while getopts "hc:s:o:" ARGS; do
+while getopts "hc:s:o:x:" ARGS; do
 	case ${ARGS} in
 	h)
 		usage
@@ -42,6 +46,9 @@ while getopts "hc:s:o:" ARGS; do
 	o)
 		BUILD_DIR="${OPTARG}"
 		;;
+	x)
+		CANADIAN="${OPTARG}"
+		;;
 	*)
 		echo "Unknown arguments: $1"
 		exit 1
@@ -54,6 +61,12 @@ if [[ "${CONFIG_FILE_NAME}" == "" ]]; then
 	exit 1
 fi
 
+TARGET_NAME="${CONFIG_FILE_NAME}"
+
+if [ "${CANADIAN}" != "" ]; then
+	TARGET_NAME="${TARGET_NAME}-${CANADIAN}"
+fi
+
 # These variables are the same as the CI script.
 export GITHUB_WORKSPACE="${SDK_DIR}"
 export WORKSPACE="${BUILD_DIR}"
@@ -61,7 +74,7 @@ export WORKSPACE="${BUILD_DIR}"
 export CT_PREFIX="${WORKSPACE}"/output
 export CT_NG="${WORKSPACE}"/crosstool-ng/bin/ct-ng
 
-TOOLCHAIN_OUTPUT_DIR="${WORKSPACE}"/output/${CONFIG_FILE_NAME}
+TOOLCHAIN_OUTPUT_DIR="${WORKSPACE}"/output/${TARGET_NAME}
 
 echo "SDK directory: ${GITHUB_WORKSPACE}"
 echo "Build directory: ${WORKSPACE}"
@@ -99,9 +112,9 @@ if [[ ! -x "${WORKSPACE}/crosstool-ng/bin/ct-ng" ]]; then
 	${CT_NG} version
 fi
 
-echo "========== Building Toolchain for ${CONFIG_FILE_NAME} =========="
+echo "========== Building Toolchain for ${TARGET_NAME} =========="
 
-BUILD_DIR="${WORKSPACE}"/build-${CONFIG_FILE_NAME}
+BUILD_DIR="${WORKSPACE}"/build-${TARGET_NAME}
 
 pushd "${WORKSPACE}" || exit 1
 
@@ -124,6 +137,13 @@ CT_EXPERIMENTAL=y
 CT_ALLOW_BUILD_AS_ROOT=y
 CT_ALLOW_BUILD_AS_ROOT_SURE=y
 EOF
+
+if [ "${CANADIAN}" != "" ]; then
+	cat << EOF >> .config
+CT_CANADIAN=y
+CT_HOST="${CANADIAN}"
+EOF
+fi
 
 "${CT_NG}" savedefconfig DEFCONFIG=build.config
 "${CT_NG}" distclean
